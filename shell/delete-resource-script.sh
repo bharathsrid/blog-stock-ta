@@ -1,4 +1,4 @@
-# Parse options passed
+# Parse options
 bucket_name=""
 stack_name=""
 aws_region=""
