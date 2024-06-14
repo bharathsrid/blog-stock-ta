@@ -1,0 +1,181 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: '
+
+  AWS Cloudformation template to create multiple lambdas that act as agents for bedrock.
+
+
+  '
+
+
+Parameters:
+  S3Bucket:
+    Type: String
+    Description: "the name of the S3 bucket where the lambda code and stock data is stored that was creted in the script"
+
+Resources:
+  IamRoleLambdaExecution:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
+      Policies:
+      - PolicyName: LambdaS3Access
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:*
+            Resource:
+            - !Sub "arn:aws:s3:::${S3Bucket}"
+            - !Sub "arn:aws:s3:::${S3Bucket}/*"
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+          - Effect: Allow
+            Action:
+            - cloudwatch:PutMetricData
+            Resource: '*'
+    Metadata:
+      SamResourceId: IamRoleLambdaExecution
+
+  YfinDailyFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !Ref S3Bucket
+        S3Key: lambda/yfinance-daily-lambda.zip
+      Handler: app.lambda_handler
+      Runtime: python3.10
+      Timeout: 900
+      MemorySize: 512
+      LoggingConfig:
+        LogFormat: JSON
+      Environment:
+        Variables:
+          LAMBDA_INSIGHTS_LOG_LEVEL: info
+          S3_BUCKET: !Ref S3Bucket
+      Role: !GetAtt IamRoleLambdaExecution.Arn
+
+
+  YfinDailyFunctionScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "Run Lambda function every day"
+      ScheduleExpression: "cron(0 0 * * ? *)"  # Run at 00:00 UTC every day
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt YfinDailyFunction.Arn
+          Id: TargetFunctionV1
+
+  YfinDailyFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: YfinDailyFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt YfinDailyFunctionScheduleRule.Arn
+
+
+  GetIndexFunction:
+    Type: AWS::Lambda::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      Code:
+        S3Bucket: !Ref S3Bucket
+        S3Key: lambda/get-index-lambda.zip
+      Handler: app.lambda_handler
+      Runtime: python3.10
+      Timeout: 120
+      MemorySize: 512
+      LoggingConfig:
+        LogFormat: JSON
+      Environment:
+        Variables:
+          LAMBDA_INSIGHTS_LOG_LEVEL: info
+          S3_BUCKET: !Ref S3Bucket
+      Role: !GetAtt IamRoleLambdaExecution.Arn
+
+
+  GetStockChangeFunction:
+    Type: AWS::Lambda::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      Code:
+        S3Bucket: !Ref S3Bucket
+        S3Key: lambda/get-stock-change-lambda.zip
+      Handler: app.lambda_handler
+      Runtime: python3.10
+      Timeout: 300
+      MemorySize: 512
+      LoggingConfig:
+        LogFormat: JSON
+      Environment:
+        Variables:
+          LAMBDA_INSIGHTS_LOG_LEVEL: info
+          S3_BUCKET: !Ref S3Bucket
+      Role: !GetAtt IamRoleLambdaExecution.Arn
+
+  GetStockTechAnalysisFunction:
+    Type: AWS::Lambda::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      Code:
+        S3Bucket: !Ref S3Bucket
+        S3Key: lambda/get-stock-tech-analysis-lambda.zip
+      Handler: app.lambda_handler
+      Runtime: python3.10
+      Timeout: 900
+      MemorySize: 1024
+      LoggingConfig:
+        LogFormat: JSON
+      Environment:
+        Variables:
+          LAMBDA_INSIGHTS_LOG_LEVEL: info
+          S3_BUCKET: !Ref S3Bucket
+      Role: !GetAtt IamRoleLambdaExecution.Arn
+
+
+
+
+  BedrockInvokeGetIndex:
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref GetIndexFunction
+      Action: lambda:InvokeFunction
+      Principal: bedrock.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:agent/*"
+
+  BedrockInvokeGetStockChange:
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref GetStockChangeFunction
+      Action: lambda:InvokeFunction
+      Principal: bedrock.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:agent/*"
+
+  BedrockInvokeGetStockTechAnalysis:
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref GetStockTechAnalysisFunction
+      Action: lambda:InvokeFunction
+      Principal: bedrock.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:agent/*"
+
+
+
+Outputs:
+  YfinDailyFunction:
+    Description: Yahoo Finance daily fetch stock details Lambda Function ARN
+    Value: !Ref YfinDailyFunction
+
+

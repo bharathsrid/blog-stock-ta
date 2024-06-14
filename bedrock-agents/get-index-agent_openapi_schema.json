@@ -1,0 +1,54 @@
+{
+    "openapi": "3.0.0",
+        "info": {
+            "title": "Get Index list of stocks api",
+            "version": "1.0.0",
+            "description": "API to fetch the list of stocks in a given index"
+        },
+        "paths": {
+            "/get-index": {
+                "get": {
+                    "summary": "Get list of stock symbols in index",
+                    "description": "Based on provided index, return list of stock symbols in the index",
+                    "operationId": "getIndex",
+                    "parameters": [{
+                        "name": "indexName",
+                        "in": "path",
+                        "description": "Index Name",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }],
+                    "responses": {
+                        "200": {
+                            "description": "Get Index stock list",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "indexName": {
+                                                    "type": "String",
+                                                    "description": "This is the name of the Index for which stocks where requested"
+                                                },
+                                                "stocksList": {
+                                                    "type": "array",
+                                                    "description": "List of stock symbols in the index"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            
+        }    
+    }
+    
